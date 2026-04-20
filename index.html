@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>FlexiBook | Smart Booking System</title>
+  <!-- Tailwind CSS + Font Awesome + Google Fonts -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      font-family: 'Inter', sans-serif;
+    }
+    body {
+      background: linear-gradient(135deg, #f5f7fc 0%, #eef2f9 100%);
+      min-height: 100vh;
+    }
+    .calendar-day {
+      transition: all 0.2s ease;
+    }
+    .calendar-day:hover:not(.disabled-day) {
+      transform: scale(0.96);
+      background-color: #e0e7ff;
+    }
+    .time-slot-btn {
+      transition: all 0.2s ease;
+    }
+    .time-slot-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px -6px rgba(0, 0, 0, 0.15);
+    }
+    .selected-slot {
+      background-color: #4f46e5 !important;
+      color: white !important;
+      border-color: #4f46e5 !important;
+      box-shadow: 0 4px 10px -2px rgba(79, 70, 229, 0.4);
+    }
+    .booking-card {
+      backdrop-filter: blur(2px);
+    }
+    @keyframes fadeSlide {
+      0% { opacity: 0; transform: translateY(-12px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    .toast-message {
+      animation: fadeSlide 0.25s ease-out forwards;
+    }
+    input:focus, button:focus {
+      outline: none;
+      ring: 2px solid #4f46e5;
+    }
+    /* Custom scroll */
+    .time-slots-container::-webkit-scrollbar {
+      height: 4px;
+      width: 6px;
+    }
+    .time-slots-container::-webkit-scrollbar-track {
+      background: #e2e8f0;
+      border-radius: 8px;
+    }
+    .time-slots-container::-webkit-scrollbar-thumb {
+      background: #a5b4fc;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body class="antialiased">
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-10">
+    <!-- Header with branding -->
+    <div class="text-center mb-8 md:mb-12">
+      <div class="inline-flex items-center gap-3 bg-white/60 backdrop-blur-sm rounded-full px-5 py-2 shadow-sm border border-gray-200/60 mb-4">
+        <i class="fas fa-calendar-check text-indigo-600 text-xl"></i>
+        <span class="font-semibold text-gray-700">Smart Booking · Studio | Barbershop | Restaurant</span>
+      </div>
+      <h1 class="text-4xl md:text-5xl font-bold bg-gradient-to-r from-indigo-800 to-purple-700 bg-clip-text text-transparent">Reserve your moment</h1>
+      <p class="text-gray-500 mt-2 max-w-lg mx-auto">Pick a date, choose a slot, and get instant email & SMS confirmation.</p>
+    </div>
+
+    <!-- Main 2-column layout -->
+    <div class="grid lg:grid-cols-3 gap-8">
+      <!-- LEFT COLUMN: CALENDAR -->
+      <div class="lg:col-span-1">
+        <div class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden p-5 transition-all">
+          <div class="flex items-center justify-between mb-6">
+            <button id="prevMonthBtn" class="w-9 h-9 rounded-full bg-gray-100 hover:bg-indigo-100 text-gray-700 transition flex items-center justify-center">
+              <i class="fas fa-chevron-left text-sm"></i>
+            </button>
+            <h2 id="monthYearDisplay" class="text-xl font-bold text-gray-800"></h2>
+            <button id="nextMonthBtn" class="w-9 h-9 rounded-full bg-gray-100 hover:bg-indigo-100 text-gray-700 transition flex items-center justify-center">
+              <i class="fas fa-chevron-right text-sm"></i>
+            </button>
+          </div>
+          <div class="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-gray-500 mb-3">
+            <span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span><span>SUN</span>
+          </div>
+          <div id="calendarGrid" class="grid grid-cols-7 gap-1.5 text-sm"></div>
+          <div class="mt-5 pt-3 border-t border-gray-100 text-xs text-gray-400 flex justify-between">
+            <span><i class="far fa-circle text-indigo-300 mr-1"></i> Available</span>
+            <span><i class="fas fa-check-circle text-emerald-500 mr-1"></i> Selected</span>
+            <span><i class="fas fa-ban text-rose-300 mr-1"></i> Full / Past</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: TIME SLOTS + BOOKING FORM -->
+      <div class="lg:col-span-2">
+        <div class="bg-white rounded-2xl shadow-xl border border-gray-100 p-5 md:p-6">
+          <!-- Selected date display -->
+          <div class="flex items-center gap-3 pb-4 border-b border-gray-100 mb-5">
+            <div class="bg-indigo-100 w-12 h-12 rounded-2xl flex items-center justify-center text-indigo-700">
+              <i class="fas fa-calendar-day text-xl"></i>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 uppercase tracking-wide">Selected Date</p>
+              <p id="selectedDateDisplay" class="text-xl font-bold text-gray-800">—</p>
+            </div>
+          </div>
+          
+          <!-- Time slots section -->
+          <div class="mb-6">
+            <div class="flex justify-between items-center mb-3 flex-wrap gap-2">
+              <h3 class="font-semibold text-gray-700 text-lg"><i class="far fa-clock mr-2 text-indigo-500"></i>Available time slots</h3>
+              <span id="slotHint" class="text-xs bg-gray-100 px-3 py-1 rounded-full text-gray-600">Click a slot to select</span>
+            </div>
+            <div id="timeSlotsContainer" class="time-slots-container flex flex-wrap gap-2.5 py-2 min-h-[120px]">
+              <!-- dynamic slots injected -->
+              <div class="w-full text-center text-gray-400 py-6">Select a date to see time slots</div>
+            </div>
+          </div>
+
+          <!-- Booking Form + Confirmation simulation -->
+          <div class="mt-4 pt-2">
+            <h3 class="font-semibold text-gray-700 text-lg mb-4"><i class="fas fa-address-card mr-2 text-indigo-500"></i>Your details</h3>
+            <form id="bookingForm" class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-600 mb-1">Full name *</label>
+                <input type="text" id="customerName" placeholder="Alex Johnson" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 transition bg-gray-50/50" required>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-600 mb-1">Email address *</label>
+                <input type="email" id="customerEmail" placeholder="hello@example.com" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 transition bg-gray-50/50" required>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-600 mb-1">Phone number (SMS) *</label>
+                <input type="tel" id="customerPhone" placeholder="+1 234 567 8900" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-200 transition bg-gray-50/50" required>
+              </div>
+              <button type="submit" id="confirmBookingBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 mt-2">
+                <i class="fas fa-envelope"></i> Confirm & receive confirmation
+              </button>
+            </form>
+            <div id="notificationArea" class="mt-5 text-sm"></div>
+            <p class="text-xs text-gray-400 mt-4 text-center border-t pt-4">
+              <i class="fas fa-shield-alt"></i> Real‑world simulation · Email & SMS confirmation will be triggered after booking
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ---------- STATE & GLOBALS ----------
+    let currentCalendarMonth = new Date();     // month displayed in calendar (any date inside that month)
+    let selectedDate = null;                   // Date object (user-picked day)
+    let selectedTimeSlot = null;               // string like "14:00"
+    
+    // Bookings storage: array of { id, dateStr, timeSlot, name, email, phone, createdAt }
+    let bookings = [];
+    
+    // DOM elements
+    const monthYearDisplay = document.getElementById('monthYearDisplay');
+    const calendarGrid = document.getElementById('calendarGrid');
+    const prevMonthBtn = document.getElementById('prevMonthBtn');
+    const nextMonthBtn = document.getElementById('nextMonthBtn');
+    const selectedDateDisplay = document.getElementById('selectedDateDisplay');
+    const timeSlotsContainer = document.getElementById('timeSlotsContainer');
+    const bookingForm = document.getElementById('bookingForm');
+    const customerNameInput = document.getElementById('customerName');
+    const customerEmailInput = document.getElementById('customerEmail');
+    const customerPhoneInput = document.getElementById('customerPhone');
+    const notificationArea = document.getElementById('notificationArea');
+    const slotHint = document.getElementById('slotHint');
+    
+    // Helper: format YYYY-MM-DD from Date object (local time)
+    function formatDateKey(date) {
+      if (!date) return null;
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    
+    // Check if two dates are same day (ignoring time)
+    function isSameDay(date1, date2) {
+      return date1 && date2 && 
+        date1.getFullYear() === date2.getFullYear() &&
+        date1.getMonth() === date2.getMonth() &&
+        date1.getDate() === date2.getDate();
+    }
+    
+    // Load bookings from localStorage, seed sample if empty
+    function loadBookings() {
+      const stored = localStorage.getItem('flexi_bookings');
+      if (stored) {
+        bookings = JSON.parse(stored);
+      } else {
+        // Seed realistic sample bookings to show real-world usage
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+        const dayAfter = new Date(today);
+        dayAfter.setDate(today.getDate() + 2);
+        
+        const sampleBookings = [];
+        // add some pre-booked slots for today (if not past, system will handle via past time logic but good for demo)
+        sampleBookings.push({ id: Date.now() + 1, dateStr: formatDateKey(today), timeSlot: "10:00", name: "Demo Client", email: "sample@demo.com", phone: "+123456789", createdAt: new Date().toISOString() });
+        sampleBookings.push({ id: Date.now() + 2, dateStr: formatDateKey(today), timeSlot: "15:00", name: "Jane Smith", email: "jane@studio.com", phone: "+987654321", createdAt: new Date().toISOString() });
+        sampleBookings.push({ id: Date.now() + 3, dateStr: formatDateKey(tomorrow), timeSlot: "09:00", name: "Mike Barber", email: "mike@cutz.com", phone: "+441234567", createdAt: new Date().toISOString() });
+        sampleBookings.push({ id: Date.now() + 4, dateStr: formatDateKey(dayAfter), timeSlot: "14:00", name: "Studio Client", email: "art@studio.com", phone: "+998877665", createdAt: new Date().toISOString() });
+        bookings = sampleBookings;
+        saveBookings();
+      }
+    }
+    
+    function saveBookings() {
+      localStorage.setItem('flexi_bookings', JSON.stringify(bookings));
+    }
+    
+    // Add new booking
+    function addBooking(dateStr, timeSlot, name, email, phone) {
+      const newBooking = {
+        id: Date.now(),
+        dateStr: dateStr,
+        timeSlot: timeSlot,
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        createdAt: new Date().toISOString()
+      };
+      bookings.push(newBooking);
+      saveBookings();
+      return newBooking;
+    }
+    
+    // Check if a specific slot is already booked (for given date)
+    function isSlotBooked(dateStr, timeSlot) {
+      return bookings.some(b => b.dateStr === dateStr && b.timeSlot === timeSlot);
+    }
+    
+    // Check if date is in the past (before today's date)
+    function isPastDate(date) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const targetDate = new Date(date);
+      targetDate.setHours(0, 0, 0, 0);
+      return targetDate < today;
+    }
+    
+    // For today, check if slot time has already passed
+    function isPastTimeSlot(date, timeSlot) {
+      if (!isSameDay(date, new Date())) return false;
+      const now = new Date();
+      const [hour, minute] = timeSlot.split(':').map(Number);
+      const slotDateTime = new Date(date);
+      slotDateTime.setHours(hour, minute, 0, 0);
+      return slotDateTime < now;
+    }
+    
+    // Generate available time slots (9:00 - 17:00 hourly)
+    function generateTimeSlotsForDate(date) {
+      const baseSlots = [];
+      for (let hour = 9; hour <= 17; hour++) {
+        const timeString = `${hour.toString().padStart(2, '0')}:00`;
+        baseSlots.push(timeString);
+      }
+      if (!date) return [];
+      const dateKey = formatDateKey(date);
+      const isPast = isPastDate(date);
+      
+      return baseSlots.map(slot => {
+        let disabled = false;
+        let reason = '';
+        if (isPast) {
+          disabled = true;
+          reason = 'past';
+        } else if (isSlotBooked(dateKey, slot)) {
+          disabled = true;
+          reason = 'booked';
+        } else if (isPastTimeSlot(date, slot)) {
+          disabled = true;
+          reason = 'passed';
+        } else {
+          disabled = false;
+        }
+        return { slot, disabled, reason };
+      });
+    }
+    
+    // Render time slots for selectedDate + manage selection
+    function renderTimeSlots() {
+      if (!selectedDate) {
+        timeSlotsContainer.innerHTML = `<div class="w-full text-center text-gray-400 py-6"><i class="far fa-calendar-times mr-2"></i>Please pick a date from calendar</div>`;
+        selectedDateDisplay.innerText = 'No date selected';
+        return;
+      }
+      
+      const formatted = formatDateKey(selectedDate);
+      const displayDateStr = selectedDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      selectedDateDisplay.innerText = displayDateStr;
+      
+      const slotsData = generateTimeSlotsForDate(selectedDate);
+      if (slotsData.length === 0) {
+        timeSlotsContainer.innerHTML = `<div class="w-full text-center text-gray-400 py-6">No time slots available for this day</div>`;
+        return;
+      }
+      
+      // Clear previous selection if the selected slot is not available anymore
+      if (selectedTimeSlot) {
+        const slotExists = slotsData.find(s => s.slot === selectedTimeSlot && !s.disabled);
+        if (!slotExists) selectedTimeSlot = null;
+      }
+      
+      const container = document.createElement('div');
+      container.className = 'flex flex-wrap gap-2.5 w-full';
+      
+      slotsData.forEach(({ slot, disabled }) => {
+        const isSelected = (selectedTimeSlot === slot && !disabled);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `time-slot-btn px-4 py-2 rounded-xl font-medium text-sm transition-all border shadow-sm ${disabled ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white text-gray-700 border-gray-300 hover:border-indigo-300 hover:bg-indigo-50'}`;
+        if (isSelected && !disabled) {
+          btn.classList.add('selected-slot');
+          btn.classList.remove('bg-white');
+        }
+        btn.innerText = slot;
+        if (disabled) {
+          btn.disabled = true;
+          btn.title = disabled ? (isSlotBooked(formatDateKey(selectedDate), slot) ? 'Already booked' : (isPastDate(selectedDate) ? 'Date has passed' : 'Time slot unavailable')) : '';
+        } else {
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            selectedTimeSlot = slot;
+            renderTimeSlots();  // re-render to update selected style
+            slotHint.innerText = `Selected: ${slot}`;
+            slotHint.classList.remove('bg-gray-100', 'text-gray-600');
+            slotHint.classList.add('bg-indigo-100', 'text-indigo-700');
+          });
+        }
+        container.appendChild(btn);
+      });
+      
+      timeSlotsContainer.innerHTML = '';
+      timeSlotsContainer.appendChild(container);
+      
+      if (!selectedTimeSlot) {
+        slotHint.innerText = 'Click a slot to select';
+        slotHint.classList.remove('bg-indigo-100', 'text-indigo-700');
+        slotHint.classList.add('bg-gray-100', 'text-gray-600');
+      } else {
+        slotHint.innerText = `Selected: ${selectedTimeSlot}`;
+        slotHint.classList.add('bg-indigo-100', 'text-indigo-700');
+        slotHint.classList.remove('bg-gray-100', 'text-gray-600');
+      }
+    }
+    
+    // Display notification message (success/error)
+    function showNotification(message, isError = false) {
+      notificationArea.innerHTML = `<div class="toast-message rounded-xl p-3 ${isError ? 'bg-rose-50 border border-rose-200 text-rose-700' : 'bg-emerald-50 border border-emerald-200 text-emerald-800'} shadow-sm flex items-start gap-2">
+        <i class="fas ${isError ? 'fa-exclamation-triangle' : 'fa-check-circle'} mt-0.5"></i>
+        <span>${message}</span>
+      </div>`;
+      setTimeout(() => {
+        if (notificationArea.firstChild) {
+          notificationArea.firstChild.style.opacity = '0';
+          setTimeout(() => {
+            if (notificationArea.firstChild === notificationArea.firstChild) 
+              notificationArea.innerHTML = '';
+          }, 300);
+        }
+      }, 4500);
+    }
+    
+    // Simulate email & SMS confirmation (realistic frontend demo)
+    function sendConfirmations(email, phone, bookingDetails) {
+      // In real app: API calls. Here we simulate with a nice visual + console
+      console.log(`[SIMULATED] Email sent to ${email} with booking #${bookingDetails.id} | SMS sent to ${phone}`);
+      // We show a detailed confirmation message
+      const msg = `✨ Booking confirmed! A confirmation email has been sent to <strong>${email}</strong> and an SMS confirmation to <strong>${phone}</strong>. <br>📌 ${bookingDetails.dateStr} at ${bookingDetails.timeSlot} – Thank you!`;
+      showNotification(msg, false);
+    }
+    
+    // Handle booking submission
+    function handleBookingSubmit(e) {
+      e.preventDefault();
+      
+      // validation
+      const name = customerNameInput.value.trim();
+      const email = customerEmailInput.value.trim();
+      const phone = customerPhoneInput.value.trim();
+      
+      if (!name || !email || !phone) {
+        showNotification('❌ Please fill in all fields (name, email, phone).', true);
+        return;
+      }
+      if (!email.includes('@') || !email.includes('.')) {
+        showNotification('📧 Please enter a valid email address.', true);
+        return;
+      }
+      if (phone.length < 6) {
+        showNotification('📞 Please enter a valid phone number.', true);
+        return;
+      }
+      if (!selectedDate) {
+        showNotification('📅 Please select a date from the calendar first.', true);
+        return;
+      }
+      if (!selectedTimeSlot) {
+        showNotification('⏰ Please select an available time slot.', true);
+        return;
+      }
+      
+      const dateKey = formatDateKey(selectedDate);
+      // double-check availability before booking (race condition guard)
+      const stillAvailable = !isSlotBooked(dateKey, selectedTimeSlot) && !isPastDate(selectedDate) && !isPastTimeSlot(selectedDate, selectedTimeSlot);
+      if (!stillAvailable) {
+        showNotification('⚠️ Sorry, this time slot is no longer available. Please select another slot.', true);
+        // reset selection and re-render
+        selectedTimeSlot = null;
+        renderTimeSlots();
+        return;
+      }
+      
+      // create booking
+      const newBooking = addBooking(dateKey, selectedTimeSlot, name, email, phone);
+      
+      // Show email/sms confirmation simulation
+      sendConfirmations(email, phone, {
+        id: newBooking.id,
+        dateStr: dateKey,
+        timeSlot: selectedTimeSlot,
+        name: name
+      });
+      
+      // Reset form and selection for next booking
+      customerNameInput.value = '';
+      customerEmailInput.value = '';
+      customerPhoneInput.value = '';
+      selectedTimeSlot = null;
+      // re-render time slots to reflect updated availability (the booked slot becomes disabled)
+      renderTimeSlots();
+      
+      // Also re-render calendar to update any visual indicator? optional, but we keep bookings indicator simple
+      renderCalendar();   // refresh calendar dots (shows booking indicators)
+      
+      // extra success scroll or subtle
+      slotHint.innerText = 'Click a slot to select';
+      slotHint.classList.remove('bg-indigo-100', 'text-indigo-700');
+      slotHint.classList.add('bg-gray-100', 'text-gray-600');
+    }
+    
+    // CALENDAR: render month view with booking dots and selection highlight
+    function renderCalendar() {
+      const year = currentCalendarMonth.getFullYear();
+      const month = currentCalendarMonth.getMonth();
+      const firstDayOfMonth = new Date(year, month, 1);
+      const startWeekday = firstDayOfMonth.getDay(); // 0 = Sunday, we need Monday first
+      let startOffset = (startWeekday === 0 ? 6 : startWeekday - 1); // shift to Monday first
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      
+      const prevMonthDays = new Date(year, month, 0).getDate();
+      const calendarCells = [];
+      
+      // Build grid: 6 rows x 7 cols = 42 cells
+      for (let i = 0; i < 42; i++) {
+        let cellDate = null;
+        let isCurrentMonth = false;
+        let dayNumber = null;
+        let cellMonth = month;
+        let cellYear = year;
+        
+        if (i < startOffset) {
+          // previous month
+          const prevDate = prevMonthDays - (startOffset - i) + 1;
+          dayNumber = prevDate;
+          cellMonth = month - 1;
+          if (cellMonth < 0) {
+            cellMonth = 11;
+            cellYear = year - 1;
+          }
+          cellDate = new Date(cellYear, cellMonth, dayNumber);
+          isCurrentMonth = false;
+        } else if (i >= startOffset + daysInMonth) {
+          // next month
+          const nextIndex = i - (startOffset + daysInMonth);
+          dayNumber = nextIndex + 1;
+          cellMonth = month + 1;
+          if (cellMonth > 11) {
+            cellMonth = 0;
+            cellYear = year + 1;
+          }
+          cellDate = new Date(cellYear, cellMonth, dayNumber);
+          isCurrentMonth = false;
+        } else {
+          // current month
+          dayNumber = i - startOffset + 1;
+          cellDate = new Date(year, month, dayNumber);
+          isCurrentMonth = true;
+        }
+        
+        const dateKey = formatDateKey(cellDate);
+        const isSelectedDate = selectedDate && isSameDay(cellDate, selectedDate);
+        const isToday = isSameDay(cellDate, new Date());
+        const hasBookings = bookings.some(b => b.dateStr === dateKey);
+        const isPast = isPastDate(cellDate);
+        
+        let additionalClasses = "rounded-xl w-full aspect-square flex flex-col items-center justify-center text-sm font-medium transition-all calendar-day ";
+        if (!isCurrentMonth) additionalClasses += "text-gray-400 ";
+        else additionalClasses += "text-gray-800 ";
+        
+        if (isSelectedDate) additionalClasses += "bg-indigo-600 text-white shadow-md ";
+        else if (isToday && !isSelectedDate) additionalClasses += "border-2 border-indigo-300 bg-indigo-50 ";
+        else if (!isPast && isCurrentMonth) additionalClasses += "hover:bg-indigo-100 cursor-pointer bg-white ";
+        else additionalClasses += "bg-gray-50 text-gray-400 cursor-default ";
+        
+        const dayDiv = document.createElement('div');
+        dayDiv.className = additionalClasses;
+        dayDiv.style.transition = "all 0.1s";
+        
+        const daySpan = document.createElement('span');
+        daySpan.className = "text-sm font-medium";
+        daySpan.innerText = dayNumber;
+        dayDiv.appendChild(daySpan);
+        
+        if (hasBookings && !isSelectedDate && isCurrentMonth) {
+          const dot = document.createElement('i');
+          dot.className = "fas fa-circle text-[8px] text-indigo-400 mt-0.5";
+          dayDiv.appendChild(dot);
+        } else if (isSelectedDate) {
+          const checkIcon = document.createElement('i');
+          checkIcon.className = "fas fa-check-circle text-[10px] text-white/80 mt-0.5";
+          dayDiv.appendChild(checkIcon);
+        } else if (isToday && !isSelectedDate) {
+          const todayDot = document.createElement('span');
+          todayDot.className = "text-[9px] font-bold text-indigo-500 mt-0.5";
+          todayDot.innerText = "●";
+          dayDiv.appendChild(todayDot);
+        } else {
+          const emptySpan = document.createElement('span');
+          emptySpan.style.height = "4px";
+          emptySpan.style.display = "block";
+          dayDiv.appendChild(emptySpan);
+        }
+        
+        if (!isPast && isCurrentMonth) {
+          dayDiv.addEventListener('click', () => {
+            selectedDate = new Date(cellDate);
+            selectedTimeSlot = null;  // reset slot when date changes
+            renderCalendar();
+            renderTimeSlots();
+          });
+        } else if (!isCurrentMonth && !isPast) {
+          // allow clicking previous/next month days only if they are not past? but improve UX: clicking them will switch month and select
+          dayDiv.addEventListener('click', () => {
+            currentCalendarMonth = new Date(cellYear, cellMonth, 1);
+            selectedDate = new Date(cellDate);
+            selectedTimeSlot = null;
+            renderCalendar();
+            renderTimeSlots();
+          });
+        }
+        
+        calendarCells.push(dayDiv);
+      }
+      
+      calendarGrid.innerHTML = '';
+      calendarCells.forEach(cell => calendarGrid.appendChild(cell));
+      
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      monthYearDisplay.innerText = `${monthNames[month]} ${year}`;
+    }
+    
+    function changeMonth(delta) {
+      const newDate = new Date(currentCalendarMonth);
+      newDate.setMonth(currentCalendarMonth.getMonth() + delta);
+      currentCalendarMonth = newDate;
+      renderCalendar();
+      // keep selected date if it still visible, otherwise no change
+      if (selectedDate) {
+        // do not reset selected date, but if it's out of month view it's fine, we keep selection
+        renderTimeSlots();
+      }
+    }
+    
+    // initialize the whole system
+    function init() {
+      loadBookings();
+      // set default selectedDate = today if not selected
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      selectedDate = today;
+      currentCalendarMonth = new Date(today);
+      selectedTimeSlot = null;
+      renderCalendar();
+      renderTimeSlots();
+      bookingForm.addEventListener('submit', handleBookingSubmit);
+      prevMonthBtn.addEventListener('click', () => changeMonth(-1));
+      nextMonthBtn.addEventListener('click', () => changeMonth(1));
+    }
+    
+    init();
+  </script>
+</body>
+</html>
